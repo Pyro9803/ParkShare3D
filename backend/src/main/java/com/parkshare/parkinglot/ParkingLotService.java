@@ -160,7 +160,7 @@ public class ParkingLotService {
     }
 
     private ParkingSpot findSpotOrThrow(UUID spotId) {
-        return parkingSpotRepository.findById(spotId)
+        return parkingSpotRepository.findByIdAndActiveTrue(spotId)
                 .orElseThrow(() -> new EntityNotFoundException("SPOT_NOT_FOUND", "Parking spot not found"));
     }
 

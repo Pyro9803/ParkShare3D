@@ -24,6 +24,12 @@ class ParkShare3dApplicationTests {
     private ParkingSpotRepository parkingSpotRepository;
 
     @MockBean
+    private com.parkshare.parkingspot.SpotAvailabilityRepository spotAvailabilityRepository;
+
+    @MockBean
+    private com.parkshare.vehicle.VehicleRepository vehicleRepository;
+
+    @MockBean
     private StringRedisTemplate stringRedisTemplate;
 
     @Test

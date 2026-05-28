@@ -190,7 +190,7 @@ class ParkingLotServiceTest {
         UUID callerId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
         ParkingSpot spot = spot(spotId, lotId, "A-01");
-        when(parkingSpotRepository.findById(spotId)).thenReturn(Optional.of(spot));
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.of(spot));
         when(parkingLotRepository.findByIdAndActiveTrue(lotId)).thenReturn(Optional.of(lot(lotId, ownerId)));
 
         assertThatThrownBy(() -> parkingLotService.deleteSpot(spotId, callerId))
@@ -207,7 +207,7 @@ class ParkingLotServiceTest {
         UUID lotId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
         ParkingSpot spot = spot(spotId, lotId, "A-01");
-        when(parkingSpotRepository.findById(spotId)).thenReturn(Optional.of(spot));
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.of(spot));
         when(parkingLotRepository.findByIdAndActiveTrue(lotId)).thenReturn(Optional.of(lot(lotId, ownerId)));
 
         parkingLotService.deleteSpot(spotId, ownerId);
@@ -236,7 +236,7 @@ class ParkingLotServiceTest {
         UUID lotId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
         ParkingSpot spot = spot(spotId, lotId, "A-01");
-        when(parkingSpotRepository.findById(spotId)).thenReturn(Optional.of(spot));
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.of(spot));
         when(parkingLotRepository.findByIdAndActiveTrue(lotId)).thenReturn(Optional.of(lot(lotId, ownerId)));
         when(parkingSpotRepository.existsByLotIdAndCodeAndActiveTrueAndIdNot(lotId, "A-02", spotId)).thenReturn(true);
 
@@ -253,7 +253,7 @@ class ParkingLotServiceTest {
         UUID callerId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
         ParkingSpot spot = spot(spotId, lotId, "A-01");
-        when(parkingSpotRepository.findById(spotId)).thenReturn(Optional.of(spot));
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.of(spot));
         when(parkingLotRepository.findByIdAndActiveTrue(lotId)).thenReturn(Optional.of(lot(lotId, ownerId)));
 
         assertThatThrownBy(() -> parkingLotService.updateSpot(spotId, callerId, updateSpotRequest("A-02")))
@@ -270,7 +270,7 @@ class ParkingLotServiceTest {
         UUID lotId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
         ParkingSpot spot = spot(spotId, lotId, "A-01");
-        when(parkingSpotRepository.findById(spotId)).thenReturn(Optional.of(spot));
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.of(spot));
         when(parkingLotRepository.findByIdAndActiveTrue(lotId)).thenReturn(Optional.of(lot(lotId, ownerId)));
         when(parkingSpotRepository.existsByLotIdAndCodeAndActiveTrueAndIdNot(lotId, "A-02", spotId)).thenReturn(false);
         when(parkingSpotRepository.save(spot)).thenReturn(spot);
@@ -280,6 +280,26 @@ class ParkingLotServiceTest {
         assertThat(response.code()).isEqualTo("A-02");
         assertThat(response.pricePerHour()).isEqualByComparingTo("3.50");
         verify(parkingSpotRepository).save(spot);
+    }
+
+    @Test
+    void updateSpotRejectsInactiveSpot() {
+        UUID spotId = UUID.randomUUID();
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> parkingLotService.updateSpot(spotId, UUID.randomUUID(), updateSpotRequest("A-02")))
+                .isInstanceOfSatisfying(EntityNotFoundException.class, exception ->
+                        assertThat(exception.getCode()).isEqualTo("SPOT_NOT_FOUND"));
+    }
+
+    @Test
+    void deleteSpotRejectsInactiveSpot() {
+        UUID spotId = UUID.randomUUID();
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> parkingLotService.deleteSpot(spotId, UUID.randomUUID()))
+                .isInstanceOfSatisfying(EntityNotFoundException.class, exception ->
+                        assertThat(exception.getCode()).isEqualTo("SPOT_NOT_FOUND"));
     }
 
     private static CreateSpotRequest createSpotRequest(String code) {

@@ -54,6 +54,9 @@ class ParkingLotControllerTest {
     @MockBean
     private ParkingLotService parkingLotService;
 
+    @MockBean
+    private com.parkshare.parkingspot.SpotSearchService spotSearchService;
+
     @Autowired
     ParkingLotControllerTest(MockMvc mockMvc) {
         this.mockMvc = mockMvc;

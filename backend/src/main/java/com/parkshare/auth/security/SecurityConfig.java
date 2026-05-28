@@ -42,7 +42,12 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/refresh"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/parking-lots", "/api/parking-lots/*").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/parking-lots",
+                                "/api/parking-lots/*",
+                                "/api/parking-spots/search",
+                                "/api/parking-spots/*/availability"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(new JwtAuthFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class);

@@ -12,8 +12,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -34,6 +36,16 @@ public class GlobalExceptionHandler {
         return failure(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "Access denied");
     }
 
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException exception) {
+        return failure(HttpStatus.BAD_REQUEST, "MISSING_PARAMETER", "Required parameter '" + exception.getParameterName() + "' is missing");
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException exception) {
+        return failure(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER", "Parameter '" + exception.getName() + "' has invalid format");
+    }
+
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleEntityNotFound(EntityNotFoundException exception) {
         return failure(HttpStatus.NOT_FOUND, exception.getCode(), exception.getMessage());
@@ -46,9 +58,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException exception) {
-        if (exception.getMessage() != null && exception.getMessage().contains("uq_parking_spots")) {
-            return failure(HttpStatus.CONFLICT, "SPOT_CODE_DUPLICATE",
-                    "Spot code already exists for this parking lot");
+        if (exception.getMessage() != null) {
+            if (exception.getMessage().contains("uq_parking_spots")) {
+                return failure(HttpStatus.CONFLICT, "SPOT_CODE_DUPLICATE", "Spot code already exists for this parking lot");
+            }
+            if (exception.getMessage().contains("uq_vehicles_active_plate")) {
+                return failure(HttpStatus.CONFLICT, "LICENSE_PLATE_DUPLICATE", "This license plate is already registered");
+            }
         }
 
         log.error("Data integrity violation", exception);
