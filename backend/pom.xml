@@ -169,6 +169,7 @@
                 <configuration>
                     <excludes>
                         <exclude>**/*IntegrationTest.java</exclude>
+                        <exclude>**/*ConcurrencyTest.java</exclude>
                     </excludes>
                 </configuration>
             </plugin>

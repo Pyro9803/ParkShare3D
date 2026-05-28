@@ -61,7 +61,7 @@ class SpotSearchServiceTest {
                 .active(true)
                 .build();
 
-        when(parkingSpotRepository.searchAvailableSpotsByLot(eq(VehicleType.CAR), any(), any(), any(), eq(lotId), any()))
+        when(parkingSpotRepository.searchAvailableSpotsByLot(eq(VehicleType.CAR), any(), any(), any(), eq(lotId), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(spot)));
 
         PagedResponse<SpotSearchResponse> response = spotSearchService.searchSpots(start, end, VehicleType.CAR, lotId, 0, 20);
@@ -120,7 +120,7 @@ class SpotSearchServiceTest {
                 .active(true)
                 .build();
 
-        when(parkingSpotRepository.searchAvailableSpots(any(), any(), any(), any(), any()))
+        when(parkingSpotRepository.searchAvailableSpots(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(spot)));
 
         PagedResponse<SpotSearchResponse> response = spotSearchService.searchSpots(start, end, VehicleType.CAR, null, 0, 20);
@@ -133,23 +133,23 @@ class SpotSearchServiceTest {
         LocalDateTime start = LocalDateTime.now(clock).plusDays(1);
         LocalDateTime end = start.plusHours(1);
         UUID lotId = UUID.randomUUID();
-        when(parkingSpotRepository.searchAvailableSpotsByLot(any(), any(), any(), any(), eq(lotId), any()))
+        when(parkingSpotRepository.searchAvailableSpotsByLot(any(), any(), any(), any(), eq(lotId), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
         spotSearchService.searchSpots(start, end, VehicleType.CAR, lotId, 0, 20);
 
-        verify(parkingSpotRepository).searchAvailableSpotsByLot(eq(VehicleType.CAR), any(), any(), any(), eq(lotId), any());
+        verify(parkingSpotRepository).searchAvailableSpotsByLot(eq(VehicleType.CAR), any(), any(), any(), eq(lotId), any(), any(), any(), any());
     }
 
     @Test
     void search_withNullLotId_passesNullToRepository() {
         LocalDateTime start = LocalDateTime.now(clock).plusDays(1);
         LocalDateTime end = start.plusHours(1);
-        when(parkingSpotRepository.searchAvailableSpots(any(), any(), any(), any(), any()))
+        when(parkingSpotRepository.searchAvailableSpots(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
         spotSearchService.searchSpots(start, end, VehicleType.CAR, null, 0, 20);
 
-        verify(parkingSpotRepository).searchAvailableSpots(eq(VehicleType.CAR), any(), any(), any(), any());
+        verify(parkingSpotRepository).searchAvailableSpots(eq(VehicleType.CAR), any(), any(), any(), any(), any(), any(), any());
     }
 }

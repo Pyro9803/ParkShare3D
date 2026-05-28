@@ -8,6 +8,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import com.parkshare.parkinglot.ParkingLotRepository;
 import com.parkshare.parkingspot.ParkingSpotRepository;
+import com.parkshare.reservation.ReservationRepository;
 import com.parkshare.user.UserRepository;
 
 @ActiveProfiles("test")
@@ -28,6 +29,9 @@ class ParkShare3dApplicationTests {
 
     @MockBean
     private com.parkshare.vehicle.VehicleRepository vehicleRepository;
+
+    @MockBean
+    private ReservationRepository reservationRepository;
 
     @MockBean
     private StringRedisTemplate stringRedisTemplate;

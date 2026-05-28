@@ -1,8 +1,11 @@
 package com.parkshare.vehicle;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
+import com.parkshare.reservation.ReservationRepository;
+import com.parkshare.reservation.ReservationStatus;
 import com.parkshare.shared.exception.ConflictException;
 import com.parkshare.shared.exception.EntityNotFoundException;
 import com.parkshare.shared.exception.ForbiddenException;
@@ -15,12 +18,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class VehicleService {
 
+    private static final Set<ReservationStatus> ACTIVE_STATUSES =
+            Set.of(ReservationStatus.RESERVED, ReservationStatus.CHECKED_IN);
+
     private final VehicleRepository vehicleRepository;
     private final VehicleMapper vehicleMapper;
+    private final ReservationRepository reservationRepository;
 
-    public VehicleService(VehicleRepository vehicleRepository, VehicleMapper vehicleMapper) {
+    public VehicleService(VehicleRepository vehicleRepository, VehicleMapper vehicleMapper,
+                           ReservationRepository reservationRepository) {
         this.vehicleRepository = vehicleRepository;
         this.vehicleMapper = vehicleMapper;
+        this.reservationRepository = reservationRepository;
     }
 
     @Transactional
@@ -72,13 +81,16 @@ public class VehicleService {
 
     @Transactional
     public void deleteVehicle(UUID vehicleId, UUID callerId) {
-        Vehicle vehicle = findVehicleOrThrow(vehicleId);
+        Vehicle vehicle = vehicleRepository.findByIdAndActiveTrueForUpdate(vehicleId)
+                .orElseThrow(() -> new EntityNotFoundException("VEHICLE_NOT_FOUND", "Vehicle not found"));
 
         if (!vehicle.getUserId().equals(callerId)) {
             throw new ForbiddenException("NOT_VEHICLE_OWNER", "Only the vehicle owner can delete this resource");
         }
 
-        // TODO Task 1.8: reject if active reservations exist
+        if (reservationRepository.existsByVehicleIdAndStatusIn(vehicleId, ACTIVE_STATUSES)) {
+            throw new ConflictException("VEHICLE_HAS_ACTIVE_RESERVATIONS", "Cannot delete vehicle with active reservations");
+        }
         vehicle.setActive(false);
         vehicleRepository.save(vehicle);
     }

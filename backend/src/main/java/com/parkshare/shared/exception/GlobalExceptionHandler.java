@@ -65,6 +65,9 @@ public class GlobalExceptionHandler {
             if (exception.getMessage().contains("uq_vehicles_active_plate")) {
                 return failure(HttpStatus.CONFLICT, "LICENSE_PLATE_DUPLICATE", "This license plate is already registered");
             }
+            if (exception.getMessage().contains("uq_reservations_idempotency_key")) {
+                return failure(HttpStatus.CONFLICT, "DUPLICATE_REQUEST", "A reservation with this idempotency key already exists");
+            }
         }
 
         log.error("Data integrity violation", exception);

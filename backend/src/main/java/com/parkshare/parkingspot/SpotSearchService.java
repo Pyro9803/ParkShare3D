@@ -6,9 +6,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Set;
 import java.util.UUID;
 
 import com.parkshare.parkingspot.dto.SpotSearchResponse;
+import com.parkshare.reservation.ReservationStatus;
 import com.parkshare.shared.api.PagedResponse;
 import com.parkshare.shared.exception.BusinessException;
 import org.springframework.data.domain.Page;
@@ -18,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SpotSearchService {
+
+    private static final Set<ReservationStatus> ACTIVE_STATUSES =
+            Set.of(ReservationStatus.RESERVED, ReservationStatus.CHECKED_IN);
 
     private final ParkingSpotRepository parkingSpotRepository;
     private final SpotSearchMapper spotSearchMapper;
@@ -47,17 +52,14 @@ public class SpotSearchService {
         PageRequest pageRequest = PageRequest.of(page, size);
         Page<ParkingSpot> spotsPage = (lotId == null)
                 ? parkingSpotRepository.searchAvailableSpots(
-                        vehicleType, dayOfWeek, startLocalTime, endLocalTime, pageRequest)
+                        vehicleType, dayOfWeek, startLocalTime, endLocalTime,
+                        startTime, endTime, ACTIVE_STATUSES, pageRequest)
                 : parkingSpotRepository.searchAvailableSpotsByLot(
-                        vehicleType, dayOfWeek, startLocalTime, endLocalTime, lotId, pageRequest);
-
-        BigDecimal durationHours = BigDecimal.valueOf(Duration.between(startTime, endTime).toMinutes())
-                .divide(BigDecimal.valueOf(60), 4, RoundingMode.HALF_UP);
+                        vehicleType, dayOfWeek, startLocalTime, endLocalTime, lotId,
+                        startTime, endTime, ACTIVE_STATUSES, pageRequest);
 
         Page<SpotSearchResponse> responsePage = spotsPage.map(spot -> {
-            BigDecimal estimatedPrice = spot.getPricePerHour()
-                    .multiply(durationHours)
-                    .setScale(2, RoundingMode.HALF_UP);
+            BigDecimal estimatedPrice = com.parkshare.shared.util.PriceCalculator.calculate(startTime, endTime, spot.getPricePerHour());
             return spotSearchMapper.toResponse(spot, estimatedPrice);
         });
 

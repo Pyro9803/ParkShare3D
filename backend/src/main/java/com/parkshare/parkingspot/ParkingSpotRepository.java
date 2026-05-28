@@ -1,13 +1,18 @@
 package com.parkshare.parkingspot;
 
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.parkshare.reservation.ReservationStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +21,10 @@ public interface ParkingSpotRepository extends JpaRepository<ParkingSpot, UUID> 
     List<ParkingSpot> findAllByLotIdAndActiveTrue(UUID lotId);
 
     Optional<ParkingSpot> findByIdAndActiveTrue(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM ParkingSpot s WHERE s.id = :id AND s.active = true")
+    Optional<ParkingSpot> findByIdAndActiveTrueForUpdate(@Param("id") UUID id);
 
     boolean existsByLotIdAndCodeAndActiveTrue(UUID lotId, String code);
 
@@ -38,14 +47,23 @@ public interface ParkingSpotRepository extends JpaRepository<ParkingSpot, UUID> 
             "      AND sa.dayOfWeek = :dayOfWeek " +
             "      AND sa.startTime <= :startTime " +
             "      AND sa.endTime >= :endTime " +
+            "  ) " +
+            "  AND NOT EXISTS (" +
+            "    SELECT 1 FROM Reservation r " +
+            "    WHERE r.spotId = s.id " +
+            "      AND r.status IN :activeStatuses " +
+            "      AND r.startTime < :endDateTime " +
+            "      AND r.endTime > :startDateTime " +
             "  )")
-    // TODO Task 1.8: add AND NOT EXISTS (reservation overlap check) to this query
     Page<ParkingSpot> searchAvailableSpotsByLot(
             @Param("vehicleType") VehicleType vehicleType,
             @Param("dayOfWeek") DayOfWeek dayOfWeek,
             @Param("startTime") LocalTime startTime,
             @Param("endTime") LocalTime endTime,
             @Param("lotId") UUID lotId,
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime,
+            @Param("activeStatuses") Collection<ReservationStatus> activeStatuses,
             Pageable pageable
     );
 
@@ -65,13 +83,22 @@ public interface ParkingSpotRepository extends JpaRepository<ParkingSpot, UUID> 
             "      AND sa.dayOfWeek = :dayOfWeek " +
             "      AND sa.startTime <= :startTime " +
             "      AND sa.endTime >= :endTime " +
+            "  ) " +
+            "  AND NOT EXISTS (" +
+            "    SELECT 1 FROM Reservation r " +
+            "    WHERE r.spotId = s.id " +
+            "      AND r.status IN :activeStatuses " +
+            "      AND r.startTime < :endDateTime " +
+            "      AND r.endTime > :startDateTime " +
             "  )")
-    // TODO Task 1.8: add AND NOT EXISTS (reservation overlap check) to this query
     Page<ParkingSpot> searchAvailableSpots(
             @Param("vehicleType") VehicleType vehicleType,
             @Param("dayOfWeek") DayOfWeek dayOfWeek,
             @Param("startTime") LocalTime startTime,
             @Param("endTime") LocalTime endTime,
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime,
+            @Param("activeStatuses") Collection<ReservationStatus> activeStatuses,
             Pageable pageable
     );
 }

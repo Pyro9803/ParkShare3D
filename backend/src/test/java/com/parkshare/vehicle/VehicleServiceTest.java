@@ -3,6 +3,7 @@ package com.parkshare.vehicle;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.parkshare.parkingspot.VehicleType;
+import com.parkshare.reservation.ReservationRepository;
 import com.parkshare.shared.exception.ConflictException;
 import com.parkshare.shared.exception.EntityNotFoundException;
 import com.parkshare.shared.exception.ForbiddenException;
@@ -31,6 +33,9 @@ class VehicleServiceTest {
     @Mock
     private VehicleRepository vehicleRepository;
 
+    @Mock
+    private ReservationRepository reservationRepository;
+
     @Spy
     private VehicleMapper vehicleMapper = Mappers.getMapper(VehicleMapper.class);
 
@@ -38,7 +43,7 @@ class VehicleServiceTest {
 
     @BeforeEach
     void setUp() {
-        vehicleService = new VehicleService(vehicleRepository, vehicleMapper);
+        vehicleService = new VehicleService(vehicleRepository, vehicleMapper, reservationRepository);
     }
 
     @Test
@@ -135,7 +140,7 @@ class VehicleServiceTest {
         UUID userId = UUID.randomUUID();
         Vehicle vehicle = Vehicle.builder().id(vehicleId).userId(userId).active(true).build();
 
-        when(vehicleRepository.findByIdAndActiveTrue(vehicleId)).thenReturn(Optional.of(vehicle));
+        when(vehicleRepository.findByIdAndActiveTrueForUpdate(vehicleId)).thenReturn(Optional.of(vehicle));
 
         vehicleService.deleteVehicle(vehicleId, userId);
 
@@ -147,7 +152,7 @@ class VehicleServiceTest {
     void deleteVehicle_notOwner_throwsForbidden() {
         UUID vehicleId = UUID.randomUUID();
         Vehicle vehicle = Vehicle.builder().id(vehicleId).userId(UUID.randomUUID()).active(true).build();
-        when(vehicleRepository.findByIdAndActiveTrue(vehicleId)).thenReturn(Optional.of(vehicle));
+        when(vehicleRepository.findByIdAndActiveTrueForUpdate(vehicleId)).thenReturn(Optional.of(vehicle));
 
         assertThatThrownBy(() -> vehicleService.deleteVehicle(vehicleId, UUID.randomUUID()))
                 .isInstanceOf(ForbiddenException.class);
@@ -156,10 +161,22 @@ class VehicleServiceTest {
     @Test
     void deleteVehicle_notFound_throws404() {
         UUID vehicleId = UUID.randomUUID();
-        when(vehicleRepository.findByIdAndActiveTrue(vehicleId)).thenReturn(Optional.empty());
+        when(vehicleRepository.findByIdAndActiveTrueForUpdate(vehicleId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> vehicleService.deleteVehicle(vehicleId, UUID.randomUUID()))
                 .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void deleteVehicle_withActiveReservations_throws409() {
+        UUID vehicleId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Vehicle vehicle = Vehicle.builder().id(vehicleId).userId(userId).active(true).build();
+        when(vehicleRepository.findByIdAndActiveTrueForUpdate(vehicleId)).thenReturn(Optional.of(vehicle));
+        when(reservationRepository.existsByVehicleIdAndStatusIn(eq(vehicleId), any())).thenReturn(true);
+
+        assertThatThrownBy(() -> vehicleService.deleteVehicle(vehicleId, userId))
+                .isInstanceOf(ConflictException.class);
     }
 
     private CreateVehicleRequest createVehicleRequest(String plate) {
