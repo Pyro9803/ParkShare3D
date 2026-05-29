@@ -5,5 +5,6 @@ public enum ReservationStatus {
     CANCELLED,
     CHECKED_IN,
     COMPLETED,
-    NO_SHOW  // set by scheduled job in Task 1.10 when driver doesn't check in within the window
+    EXPIRED,  // set by scheduler when RESERVED past startTime+45min without check-in
+    NO_SHOW   // set by scheduler when CHECKED_IN past endTime+1h without check-out
 }

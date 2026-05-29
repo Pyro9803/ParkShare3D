@@ -11,9 +11,25 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Modifying;
+import java.time.Instant;
 import java.util.Optional;
 
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
+
+    @Modifying
+    @Query("UPDATE Reservation r SET r.status = com.parkshare.reservation.ReservationStatus.EXPIRED, " +
+           "r.updatedAt = :now " +
+           "WHERE r.status = com.parkshare.reservation.ReservationStatus.RESERVED " +
+           "  AND r.startTime < :cutoff")
+    int expireStaleReservations(@Param("cutoff") LocalDateTime cutoff, @Param("now") Instant now);
+
+    @Modifying
+    @Query("UPDATE Reservation r SET r.status = com.parkshare.reservation.ReservationStatus.NO_SHOW, " +
+           "r.updatedAt = :now " +
+           "WHERE r.status = com.parkshare.reservation.ReservationStatus.CHECKED_IN " +
+           "  AND r.endTime < :cutoff")
+    int markNoShowReservations(@Param("cutoff") LocalDateTime cutoff, @Param("now") Instant now);
 
     Page<Reservation> findAllByDriverIdOrderByCreatedAtDesc(UUID driverId, Pageable pageable);
 

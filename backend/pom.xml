@@ -170,6 +170,7 @@
                     <excludes>
                         <exclude>**/*IntegrationTest.java</exclude>
                         <exclude>**/*ConcurrencyTest.java</exclude>
+                        <exclude>**/*SchedulerIntegrationTest.java</exclude>
                     </excludes>
                 </configuration>
             </plugin>
