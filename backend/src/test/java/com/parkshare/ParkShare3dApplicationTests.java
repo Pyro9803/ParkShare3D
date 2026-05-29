@@ -10,6 +10,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.parkshare.parkinglot.ParkingLotRepository;
 import com.parkshare.parkingspot.ParkingSpotRepository;
 import com.parkshare.reservation.ReservationRepository;
+import com.parkshare.review.ReviewRepository;
 import com.parkshare.user.UserRepository;
 
 @ActiveProfiles("test")
@@ -36,6 +37,9 @@ class ParkShare3dApplicationTests {
 
     @MockBean
     private com.parkshare.checkin.CheckInLogRepository checkInLogRepository;
+
+    @MockBean
+    private ReviewRepository reviewRepository;
 
     @MockBean
     private StringRedisTemplate stringRedisTemplate;

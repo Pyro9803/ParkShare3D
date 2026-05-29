@@ -18,6 +18,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface ParkingSpotRepository extends JpaRepository<ParkingSpot, UUID> {
 
+    long countByActiveTrue();
+
+    List<ParkingSpot> findAllByLotId(UUID lotId);
+
     List<ParkingSpot> findAllByLotIdAndActiveTrue(UUID lotId);
 
     Optional<ParkingSpot> findByIdAndActiveTrue(UUID id);

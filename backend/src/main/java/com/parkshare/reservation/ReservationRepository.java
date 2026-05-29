@@ -13,10 +13,19 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Modifying;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
+
+    Page<Reservation> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<Reservation> findAllByStatusOrderByCreatedAtDesc(ReservationStatus status, Pageable pageable);
+
+    @Query("SELECT COALESCE(SUM(r.totalPrice), 0.0) FROM Reservation r " +
+           "WHERE r.status = com.parkshare.reservation.ReservationStatus.COMPLETED")
+    BigDecimal sumTotalPriceByStatusCompleted();
 
     @Modifying
     @Query("UPDATE Reservation r SET r.status = com.parkshare.reservation.ReservationStatus.EXPIRED, " +

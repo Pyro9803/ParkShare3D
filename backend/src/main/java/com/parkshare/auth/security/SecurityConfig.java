@@ -45,8 +45,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/parking-lots",
                                 "/api/parking-lots/*",
+                                "/api/parking-lots/*/map",
                                 "/api/parking-spots/search",
-                                "/api/parking-spots/*/availability"
+                                "/api/parking-spots/*/availability",
+                                "/api/parking-spots/*/reviews"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

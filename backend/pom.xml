@@ -116,6 +116,15 @@
             <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Provides com.sun.jna.platform.win32.* so Mockito's inline mock maker
+             can self-attach the ByteBuddy agent on Windows. Version aligned with
+             the transitively-resolved jna core. -->
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna-platform</artifactId>
+            <version>5.13.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>
@@ -175,6 +184,7 @@
                         <exclude>**/*ConcurrencyTest.java</exclude>
                         <exclude>**/*SchedulerIntegrationTest.java</exclude>
                         <exclude>**/*MapIntegrationTest.java</exclude>
+                        <exclude>**/*ReviewIntegrationTest.java</exclude>
                     </excludes>
                 </configuration>
             </plugin>
