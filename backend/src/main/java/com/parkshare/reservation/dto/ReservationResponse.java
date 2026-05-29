@@ -16,5 +16,6 @@ public record ReservationResponse(
         LocalDateTime startTime,
         LocalDateTime endTime,
         BigDecimal totalPrice,
+        LocalDateTime checkedInAt,
         Instant createdAt
 ) {}

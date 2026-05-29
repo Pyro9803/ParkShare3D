@@ -57,7 +57,7 @@ class SpotSearchServiceTest {
                 .lotId(lotId)
                 .code("A-01")
                 .vehicleType(VehicleType.CAR)
-                .pricePerHour(new BigDecimal("10.00"))
+                .pricePerHour(new BigDecimal("10000.00"))
                 .active(true)
                 .build();
 
@@ -67,7 +67,7 @@ class SpotSearchServiceTest {
         PagedResponse<SpotSearchResponse> response = spotSearchService.searchSpots(start, end, VehicleType.CAR, lotId, 0, 20);
 
         assertThat(response.content()).hasSize(1);
-        assertThat(response.content().get(0).estimatedPrice()).isEqualByComparingTo("20.00");
+        assertThat(response.content().get(0).estimatedPrice()).isEqualByComparingTo("20000.00");
     }
 
     @Test
@@ -112,11 +112,11 @@ class SpotSearchServiceTest {
 
     @Test
     void search_estimatedPrice_calculatedCorrectly() {
-        // 90 minutes at 40.00/hr = 60.00
+        // 90 minutes at 40000.00/hr = 60000.00
         LocalDateTime start = LocalDateTime.now(clock).plusDays(1).withHour(10).withMinute(0);
         LocalDateTime end = start.plusMinutes(90);
         ParkingSpot spot = ParkingSpot.builder()
-                .pricePerHour(new BigDecimal("40.00"))
+                .pricePerHour(new BigDecimal("40000.00"))
                 .active(true)
                 .build();
 
@@ -125,7 +125,7 @@ class SpotSearchServiceTest {
 
         PagedResponse<SpotSearchResponse> response = spotSearchService.searchSpots(start, end, VehicleType.CAR, null, 0, 20);
 
-        assertThat(response.content().get(0).estimatedPrice()).isEqualByComparingTo("60.00");
+        assertThat(response.content().get(0).estimatedPrice()).isEqualByComparingTo("60000.00");
     }
 
     @Test

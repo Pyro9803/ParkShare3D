@@ -5,6 +5,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.parkshare.parkinglot.ParkingLotRepository;
 import com.parkshare.parkingspot.ParkingSpotRepository;
@@ -34,7 +35,13 @@ class ParkShare3dApplicationTests {
     private ReservationRepository reservationRepository;
 
     @MockBean
+    private com.parkshare.checkin.CheckInLogRepository checkInLogRepository;
+
+    @MockBean
     private StringRedisTemplate stringRedisTemplate;
+
+    @MockBean
+    private TransactionTemplate transactionTemplate;
 
     @Test
     void contextLoads() {

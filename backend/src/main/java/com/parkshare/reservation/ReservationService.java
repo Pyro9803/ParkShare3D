@@ -1,13 +1,18 @@
 package com.parkshare.reservation;
 
+import com.parkshare.checkin.CheckInLog;
+import com.parkshare.checkin.CheckInLogMapper;
+import com.parkshare.checkin.CheckInLogRepository;
 import com.parkshare.parkinglot.ParkingLot;
 import com.parkshare.parkinglot.ParkingLotRepository;
 import com.parkshare.parkingspot.ParkingSpot;
 import com.parkshare.parkingspot.ParkingSpotRepository;
+import com.parkshare.reservation.dto.CheckInLogResponse;
 import com.parkshare.reservation.dto.CreateReservationRequest;
 import com.parkshare.reservation.dto.ReservationResponse;
 import com.parkshare.shared.api.PagedResponse;
 import com.parkshare.shared.exception.BusinessException;
+import com.parkshare.shared.exception.CheckInWindowException;
 import com.parkshare.shared.exception.ConflictException;
 import com.parkshare.shared.exception.EntityNotFoundException;
 import com.parkshare.shared.exception.ForbiddenException;
@@ -39,8 +44,10 @@ public class ReservationService {
     private final ParkingSpotRepository parkingSpotRepository;
     private final VehicleRepository vehicleRepository;
     private final ParkingLotRepository parkingLotRepository;
+    private final CheckInLogRepository checkInLogRepository;
     private final IdempotencyService idempotencyService;
     private final ReservationMapper reservationMapper;
+    private final CheckInLogMapper checkInLogMapper;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
 
@@ -48,16 +55,20 @@ public class ReservationService {
                               ParkingSpotRepository parkingSpotRepository,
                               VehicleRepository vehicleRepository,
                               ParkingLotRepository parkingLotRepository,
+                              CheckInLogRepository checkInLogRepository,
                               IdempotencyService idempotencyService,
                               ReservationMapper reservationMapper,
+                              CheckInLogMapper checkInLogMapper,
                               Clock clock,
                               TransactionTemplate transactionTemplate) {
         this.reservationRepository = reservationRepository;
         this.parkingSpotRepository = parkingSpotRepository;
         this.vehicleRepository = vehicleRepository;
         this.parkingLotRepository = parkingLotRepository;
+        this.checkInLogRepository = checkInLogRepository;
         this.idempotencyService = idempotencyService;
         this.reservationMapper = reservationMapper;
+        this.checkInLogMapper = checkInLogMapper;
         this.clock = clock;
         this.transactionTemplate = transactionTemplate;
     }
@@ -67,8 +78,6 @@ public class ReservationService {
             return transactionTemplate.execute(status -> createReservationInternal(driverId, request, idempotencyKey));
         } catch (DataIntegrityViolationException e) {
             if (idempotencyKey != null && e.getMessage() != null && e.getMessage().contains("uq_reservations_idempotency_key")) {
-                // Race condition: another thread saved the record but hasn't updated the Redis cache yet.
-                // We wait briefly and then attempt to return the cached response.
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException ignored) {
@@ -82,13 +91,11 @@ public class ReservationService {
     }
 
     private ReservationResponse createReservationInternal(UUID driverId, CreateReservationRequest request, String idempotencyKey) {
-        // Step 1: Idempotency check
         if (idempotencyKey != null) {
             var cached = idempotencyService.get(idempotencyKey, ReservationResponse.class);
             if (cached.isPresent()) return cached.get();
         }
 
-        // Step 2: Validate time window
         LocalDateTime now = LocalDateTime.now(clock);
         if (!request.startTime().isAfter(now)) {
             throw new BusinessException("INVALID_START_TIME", "Start time must be in the future");
@@ -103,39 +110,32 @@ public class ReservationService {
             throw new BusinessException("CROSS_DAY_NOT_SUPPORTED", "Reservations must be within the same day");
         }
 
-        // Step 3: Load vehicle
         Vehicle vehicle = vehicleRepository.findByIdAndActiveTrue(request.vehicleId())
                 .orElseThrow(() -> new EntityNotFoundException("VEHICLE_NOT_FOUND", "Vehicle not found"));
         if (!vehicle.getUserId().equals(driverId)) {
             throw new ForbiddenException("NOT_YOUR_VEHICLE", "You don't own this vehicle");
         }
 
-        // Step 4: Acquire pessimistic lock on spot
         ParkingSpot spot = parkingSpotRepository.findByIdAndActiveTrueForUpdate(request.parkingSpotId())
                 .orElseThrow(() -> new EntityNotFoundException("SPOT_NOT_FOUND", "Parking spot not found"));
 
-        // Step 5: Vehicle type must match spot type
         if (!vehicle.getVehicleType().equals(spot.getVehicleType())) {
             throw new BusinessException("VEHICLE_TYPE_MISMATCH", "Vehicle type does not match spot type");
         }
 
-        // Step 6: Load lot; driver must not be the lot owner
         ParkingLot lot = parkingLotRepository.findByIdAndActiveTrue(spot.getLotId())
                 .orElseThrow(() -> new EntityNotFoundException("LOT_NOT_FOUND", "Parking lot not found"));
         if (lot.getOwnerId().equals(driverId)) {
             throw new ForbiddenException("CANNOT_BOOK_OWN_SPOT", "You cannot book a spot in your own lot");
         }
 
-        // Step 7: Overlap check (within the pessimistic lock)
         if (reservationRepository.existsOverlappingReservation(
                 request.parkingSpotId(), request.startTime(), request.endTime(), ACTIVE_STATUSES)) {
             throw new ConflictException("SPOT_NOT_AVAILABLE", "Spot is not available for the requested time");
         }
 
-        // Step 8: Compute total price, rounded to nearest 1000 VND
         BigDecimal totalPrice = PriceCalculator.calculate(request.startTime(), request.endTime(), spot.getPricePerHour());
 
-        // Step 9: Persist
         Reservation reservation = Reservation.builder()
                 .spotId(request.parkingSpotId())
                 .vehicleId(request.vehicleId())
@@ -147,7 +147,6 @@ public class ReservationService {
                 .build();
         reservation = reservationRepository.save(reservation);
 
-        // Step 10: Map and store idempotency response
         ReservationResponse response = reservationMapper.toResponse(reservation);
         if (idempotencyKey != null) {
             idempotencyService.store(idempotencyKey, response);
@@ -157,9 +156,132 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<ReservationResponse> getMyReservations(UUID driverId, int page, int size) {
-        Page<Reservation> reservationsPage = reservationRepository.findAllByDriverIdOrderByCreatedAtDesc(
-                driverId, PageRequest.of(page, size));
+    public PagedResponse<ReservationResponse> getMyReservations(UUID driverId, ReservationStatus status, int page, int size) {
+        Page<Reservation> reservationsPage;
+        if (status == null) {
+            reservationsPage = reservationRepository.findAllByDriverIdOrderByCreatedAtDesc(
+                    driverId, PageRequest.of(page, size));
+        } else {
+            reservationsPage = reservationRepository.findAllByDriverIdAndStatusOrderByCreatedAtDesc(
+                    driverId, status, PageRequest.of(page, size));
+        }
+        return PagedResponse.from(reservationsPage.map(reservationMapper::toResponse));
+    }
+
+    @Transactional(readOnly = true)
+    public ReservationResponse getReservationById(UUID reservationId, UUID callerId) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
+
+        if (reservation.getDriverId().equals(callerId)) {
+            return reservationMapper.toResponse(reservation);
+        }
+
+        ParkingSpot spot = parkingSpotRepository.findByIdAndActiveTrue(reservation.getSpotId())
+                .orElseThrow(() -> new EntityNotFoundException("SPOT_NOT_FOUND", "Parking spot not found"));
+        ParkingLot lot = parkingLotRepository.findByIdAndActiveTrue(spot.getLotId())
+                .orElseThrow(() -> new EntityNotFoundException("LOT_NOT_FOUND", "Parking lot not found"));
+
+        if (lot.getOwnerId().equals(callerId)) {
+            return reservationMapper.toResponse(reservation);
+        }
+
+        throw new ForbiddenException("NOT_AUTHORIZED", "Access denied");
+    }
+
+    @Transactional
+    public ReservationResponse cancelReservation(UUID reservationId, UUID driverId) {
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
+
+        if (!reservation.getDriverId().equals(driverId)) {
+            throw new ForbiddenException("NOT_AUTHORIZED", "Access denied");
+        }
+
+        if (reservation.getStatus() != ReservationStatus.RESERVED) {
+            throw new BusinessException("INVALID_STATUS", "Cannot cancel a reservation that is not RESERVED");
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (!reservation.getStartTime().isAfter(now.plusMinutes(30))) {
+            throw new BusinessException("CANCEL_WINDOW_EXPIRED", "Cancellation must be at least 30 minutes before start time");
+        }
+
+        reservation.setStatus(ReservationStatus.CANCELLED);
+        reservation = reservationRepository.save(reservation);
+
+        return reservationMapper.toResponse(reservation);
+    }
+
+    @Transactional
+    public ReservationResponse checkInReservation(UUID reservationId, UUID driverId) {
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
+
+        if (!reservation.getDriverId().equals(driverId)) {
+            throw new ForbiddenException("NOT_AUTHORIZED", "Access denied");
+        }
+
+        if (reservation.getStatus() != ReservationStatus.RESERVED) {
+            throw new BusinessException("INVALID_STATUS", "Cannot check-in a reservation that is not RESERVED");
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (now.isBefore(reservation.getStartTime().minusMinutes(15)) || now.isAfter(reservation.getStartTime().plusMinutes(30))) {
+            throw new CheckInWindowException("Check-in is only allowed between 15 minutes before and 30 minutes after the start time");
+        }
+
+        reservation.setStatus(ReservationStatus.CHECKED_IN);
+        reservation.setCheckedInAt(now);
+        reservation = reservationRepository.save(reservation);
+
+        return reservationMapper.toResponse(reservation);
+    }
+
+    @Transactional
+    public CheckInLogResponse checkOutReservation(UUID reservationId, UUID driverId) {
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(() -> new EntityNotFoundException("RESERVATION_NOT_FOUND", "Reservation not found"));
+
+        if (!reservation.getDriverId().equals(driverId)) {
+            throw new ForbiddenException("NOT_AUTHORIZED", "Access denied");
+        }
+
+        if (reservation.getStatus() != ReservationStatus.CHECKED_IN) {
+            throw new BusinessException("INVALID_STATUS", "Cannot check-out a reservation that is not CHECKED_IN");
+        }
+
+        if (reservation.getCheckedInAt() == null) {
+            throw new BusinessException("MISSING_CHECKIN_TIME", "Reservation is in CHECKED_IN state but has no check-in timestamp");
+        }
+
+        LocalDateTime checkOutTime = LocalDateTime.now(clock);
+        int actualMinutes = (int) Duration.between(reservation.getCheckedInAt(), checkOutTime).toMinutes();
+
+        reservation.setStatus(ReservationStatus.COMPLETED);
+        reservationRepository.save(reservation);
+
+        CheckInLog log = CheckInLog.builder()
+                .reservationId(reservation.getId())
+                .checkInTime(reservation.getCheckedInAt())
+                .checkOutTime(checkOutTime)
+                .actualDurationMinutes(actualMinutes)
+                .build();
+        log = checkInLogRepository.save(log);
+
+        return checkInLogMapper.toResponse(log);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<ReservationResponse> getReservationsByLotId(UUID lotId, UUID ownerId, int page, int size) {
+        ParkingLot lot = parkingLotRepository.findByIdAndActiveTrue(lotId)
+                .orElseThrow(() -> new EntityNotFoundException("LOT_NOT_FOUND", "Parking lot not found"));
+
+        if (!lot.getOwnerId().equals(ownerId)) {
+            throw new ForbiddenException("NOT_AUTHORIZED", "Access denied");
+        }
+
+        Page<Reservation> reservationsPage = reservationRepository.findAllByLotId(lotId, PageRequest.of(page, size));
         return PagedResponse.from(reservationsPage.map(reservationMapper::toResponse));
     }
 }

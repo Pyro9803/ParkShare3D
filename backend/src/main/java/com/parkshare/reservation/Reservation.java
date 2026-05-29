@@ -60,6 +60,9 @@ public class Reservation {
     @Column(name = "idempotency_key", unique = true)
     private String idempotencyKey;
 
+    @Column(name = "checked_in_at")
+    private LocalDateTime checkedInAt;
+
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 

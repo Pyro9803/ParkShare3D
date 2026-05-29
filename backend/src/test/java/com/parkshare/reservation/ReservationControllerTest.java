@@ -15,10 +15,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.parkshare.reservation.dto.CheckInLogResponse;
 import com.parkshare.reservation.dto.CreateReservationRequest;
 import com.parkshare.reservation.dto.ReservationResponse;
 import com.parkshare.shared.api.PagedResponse;
 import com.parkshare.shared.exception.BusinessException;
+import com.parkshare.shared.exception.CheckInWindowException;
 import com.parkshare.shared.exception.ConflictException;
 import com.parkshare.shared.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
@@ -53,7 +55,7 @@ class ReservationControllerTest {
         LocalDateTime end = start.plusHours(2);
         ReservationResponse response = new ReservationResponse(
                 UUID.randomUUID(), spotId, vehicleId, driverId,
-                ReservationStatus.RESERVED, start, end, new BigDecimal("100000.00"), Instant.now()
+                ReservationStatus.RESERVED, start, end, new BigDecimal("100000.00"), null, Instant.now()
         );
 
         when(reservationService.createReservation(eq(driverId), any(CreateReservationRequest.class), isNull()))
@@ -142,7 +144,7 @@ class ReservationControllerTest {
         LocalDateTime end = start.plusHours(2);
         ReservationResponse response = new ReservationResponse(
                 UUID.randomUUID(), spotId, vehicleId, driverId,
-                ReservationStatus.RESERVED, start, end, new BigDecimal("100000.00"), Instant.now()
+                ReservationStatus.RESERVED, start, end, new BigDecimal("100000.00"), null, Instant.now()
         );
 
         when(reservationService.createReservation(eq(driverId), any(CreateReservationRequest.class), eq(idempotencyKey)))
@@ -167,11 +169,124 @@ class ReservationControllerTest {
     @Test
     void getMyReservations_returns200() throws Exception {
         UUID driverId = UUID.randomUUID();
-        when(reservationService.getMyReservations(eq(driverId), eq(0), eq(20)))
+        when(reservationService.getMyReservations(eq(driverId), isNull(), eq(0), eq(20)))
                 .thenReturn(new PagedResponse<>(List.of(), 0, 0, 0, 20));
 
         mockMvc.perform(get("/api/reservations/my")
                         .principal(new UsernamePasswordAuthenticationToken(driverId, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void cancel_returns200() throws Exception {
+        UUID driverId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        ReservationResponse response = new ReservationResponse(
+                reservationId, UUID.randomUUID(), UUID.randomUUID(), driverId,
+                ReservationStatus.CANCELLED, LocalDateTime.now(), LocalDateTime.now(), BigDecimal.ZERO, null, Instant.now()
+        );
+
+        when(reservationService.cancelReservation(reservationId, driverId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/reservations/{id}/cancel", reservationId)
+                        .principal(new UsernamePasswordAuthenticationToken(driverId, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+    }
+
+    @Test
+    void cancel_notReserved_returns400() throws Exception {
+        UUID driverId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+
+        when(reservationService.cancelReservation(reservationId, driverId))
+                .thenThrow(new BusinessException("INVALID_STATUS", "Cannot cancel a reservation that is not RESERVED"));
+
+        mockMvc.perform(post("/api/reservations/{id}/cancel", reservationId)
+                        .principal(new UsernamePasswordAuthenticationToken(driverId, null)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_STATUS"));
+    }
+
+    @Test
+    void checkIn_returns200() throws Exception {
+        UUID driverId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        ReservationResponse response = new ReservationResponse(
+                reservationId, UUID.randomUUID(), UUID.randomUUID(), driverId,
+                ReservationStatus.CHECKED_IN, LocalDateTime.now(), LocalDateTime.now(), BigDecimal.ZERO, null, Instant.now()
+        );
+
+        when(reservationService.checkInReservation(reservationId, driverId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/reservations/{id}/check-in", reservationId)
+                        .principal(new UsernamePasswordAuthenticationToken(driverId, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("CHECKED_IN"));
+    }
+
+    @Test
+    void checkIn_windowExpired_returns400() throws Exception {
+        UUID driverId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+
+        when(reservationService.checkInReservation(reservationId, driverId))
+                .thenThrow(new CheckInWindowException("Check-in is only allowed between 15 minutes before and 30 minutes after the start time"));
+
+        mockMvc.perform(post("/api/reservations/{id}/check-in", reservationId)
+                        .principal(new UsernamePasswordAuthenticationToken(driverId, null)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("CHECKIN_WINDOW_EXPIRED"));
+    }
+
+    @Test
+    void checkOut_returns200WithCheckInLog() throws Exception {
+        UUID driverId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        CheckInLogResponse response = new CheckInLogResponse(
+                UUID.randomUUID(), reservationId, LocalDateTime.now(), LocalDateTime.now(), 60
+        );
+
+        when(reservationService.checkOutReservation(reservationId, driverId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/reservations/{id}/check-out", reservationId)
+                        .principal(new UsernamePasswordAuthenticationToken(driverId, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.actualDurationMinutes").value(60));
+    }
+
+    @Test
+    void getById_returns200() throws Exception {
+        UUID callerId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        ReservationResponse response = new ReservationResponse(
+                reservationId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                ReservationStatus.RESERVED, LocalDateTime.now(), LocalDateTime.now(), BigDecimal.ZERO, null, Instant.now()
+        );
+
+        when(reservationService.getReservationById(reservationId, callerId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/reservations/{id}", reservationId)
+                        .principal(new UsernamePasswordAuthenticationToken(callerId, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(reservationId.toString()));
+    }
+
+    @Test
+    void getByLot_returns200() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID lotId = UUID.randomUUID();
+
+        when(reservationService.getReservationsByLotId(eq(lotId), eq(ownerId), eq(0), eq(20)))
+                .thenReturn(new PagedResponse<>(List.of(), 0, 0, 0, 20));
+
+        mockMvc.perform(get("/api/parking-lots/{lotId}/reservations", lotId)
+                        .principal(new UsernamePasswordAuthenticationToken(ownerId, null)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
