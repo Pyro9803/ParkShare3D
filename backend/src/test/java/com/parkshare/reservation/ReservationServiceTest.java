@@ -29,6 +29,7 @@ import com.parkshare.reservation.dto.CheckInLogResponse;
 import com.parkshare.reservation.dto.CreateReservationRequest;
 import com.parkshare.reservation.dto.ReservationResponse;
 import com.parkshare.shared.api.PagedResponse;
+import com.parkshare.shared.cache.MapCacheService;
 import com.parkshare.shared.exception.BusinessException;
 import com.parkshare.shared.exception.CheckInWindowException;
 import com.parkshare.shared.exception.ConflictException;
@@ -67,6 +68,9 @@ class ReservationServiceTest {
     @Mock
     private IdempotencyService idempotencyService;
 
+    @Mock
+    private MapCacheService mapCacheService;
+
     @Spy
     private ReservationMapper reservationMapper = Mappers.getMapper(ReservationMapper.class);
 
@@ -84,7 +88,7 @@ class ReservationServiceTest {
     void setUp() {
         reservationService = new ReservationService(
                 reservationRepository, parkingSpotRepository, vehicleRepository,
-                parkingLotRepository, checkInLogRepository, idempotencyService, reservationMapper, checkInLogMapper, clock, transactionTemplate
+                parkingLotRepository, checkInLogRepository, idempotencyService, mapCacheService, reservationMapper, checkInLogMapper, clock, transactionTemplate
         );
         org.mockito.Mockito.lenient().when(transactionTemplate.execute(any())).thenAnswer(inv -> {
             org.springframework.transaction.support.TransactionCallback<?> callback = inv.getArgument(0);
@@ -390,19 +394,24 @@ class ReservationServiceTest {
     void cancel_success() {
         UUID driverId = UUID.randomUUID();
         UUID reservationId = UUID.randomUUID();
+        UUID lotId = UUID.randomUUID();
+        UUID spotId = UUID.randomUUID();
         Reservation reservation = Reservation.builder()
                 .id(reservationId)
                 .driverId(driverId)
+                .spotId(spotId)
                 .status(ReservationStatus.RESERVED)
                 .startTime(LocalDateTime.now(clock).plusHours(2))
                 .build();
 
         when(reservationRepository.findByIdForUpdate(reservationId)).thenReturn(Optional.of(reservation));
         when(reservationRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(parkingSpotRepository.findByIdAndActiveTrue(spotId)).thenReturn(Optional.of(ParkingSpot.builder().id(spotId).lotId(lotId).build()));
 
         ReservationResponse response = reservationService.cancelReservation(reservationId, driverId);
 
         assertThat(response.status()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(mapCacheService).evict(lotId);
     }
 
     @Test

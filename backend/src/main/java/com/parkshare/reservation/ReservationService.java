@@ -11,6 +11,7 @@ import com.parkshare.reservation.dto.CheckInLogResponse;
 import com.parkshare.reservation.dto.CreateReservationRequest;
 import com.parkshare.reservation.dto.ReservationResponse;
 import com.parkshare.shared.api.PagedResponse;
+import com.parkshare.shared.cache.MapCacheService;
 import com.parkshare.shared.exception.BusinessException;
 import com.parkshare.shared.exception.CheckInWindowException;
 import com.parkshare.shared.exception.ConflictException;
@@ -46,6 +47,7 @@ public class ReservationService {
     private final ParkingLotRepository parkingLotRepository;
     private final CheckInLogRepository checkInLogRepository;
     private final IdempotencyService idempotencyService;
+    private final MapCacheService mapCacheService;
     private final ReservationMapper reservationMapper;
     private final CheckInLogMapper checkInLogMapper;
     private final Clock clock;
@@ -57,6 +59,7 @@ public class ReservationService {
                               ParkingLotRepository parkingLotRepository,
                               CheckInLogRepository checkInLogRepository,
                               IdempotencyService idempotencyService,
+                              MapCacheService mapCacheService,
                               ReservationMapper reservationMapper,
                               CheckInLogMapper checkInLogMapper,
                               Clock clock,
@@ -67,6 +70,7 @@ public class ReservationService {
         this.parkingLotRepository = parkingLotRepository;
         this.checkInLogRepository = checkInLogRepository;
         this.idempotencyService = idempotencyService;
+        this.mapCacheService = mapCacheService;
         this.reservationMapper = reservationMapper;
         this.checkInLogMapper = checkInLogMapper;
         this.clock = clock;
@@ -147,6 +151,8 @@ public class ReservationService {
                 .build();
         reservation = reservationRepository.save(reservation);
 
+        mapCacheService.evict(lot.getId());
+
         ReservationResponse response = reservationMapper.toResponse(reservation);
         if (idempotencyKey != null) {
             idempotencyService.store(idempotencyKey, response);
@@ -209,6 +215,10 @@ public class ReservationService {
 
         reservation.setStatus(ReservationStatus.CANCELLED);
         reservation = reservationRepository.save(reservation);
+
+        ParkingSpot spot = parkingSpotRepository.findByIdAndActiveTrue(reservation.getSpotId())
+                .orElseThrow(() -> new EntityNotFoundException("SPOT_NOT_FOUND", "Parking spot not found"));
+        mapCacheService.evict(spot.getLotId());
 
         return reservationMapper.toResponse(reservation);
     }

@@ -137,6 +137,9 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <release>${java.version}</release>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -171,6 +174,7 @@
                         <exclude>**/*IntegrationTest.java</exclude>
                         <exclude>**/*ConcurrencyTest.java</exclude>
                         <exclude>**/*SchedulerIntegrationTest.java</exclude>
+                        <exclude>**/*MapIntegrationTest.java</exclude>
                     </excludes>
                 </configuration>
             </plugin>

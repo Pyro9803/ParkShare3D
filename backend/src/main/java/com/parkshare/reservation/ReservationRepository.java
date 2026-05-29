@@ -2,6 +2,7 @@ package com.parkshare.reservation;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -30,6 +31,18 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
            "WHERE r.status = com.parkshare.reservation.ReservationStatus.CHECKED_IN " +
            "  AND r.endTime < :cutoff")
     int markNoShowReservations(@Param("cutoff") LocalDateTime cutoff, @Param("now") Instant now);
+
+    @Query("SELECT r.spotId FROM Reservation r " +
+           "WHERE r.spotId IN (SELECT s.id FROM ParkingSpot s WHERE s.lotId = :lotId) " +
+           "  AND r.status = com.parkshare.reservation.ReservationStatus.CHECKED_IN " +
+           "  AND r.startTime <= :now AND r.endTime > :now")
+    List<UUID> findOccupiedSpotIdsForLot(@Param("lotId") UUID lotId, @Param("now") LocalDateTime now);
+
+    @Query("SELECT r.spotId FROM Reservation r " +
+           "WHERE r.spotId IN (SELECT s.id FROM ParkingSpot s WHERE s.lotId = :lotId) " +
+           "  AND r.status = com.parkshare.reservation.ReservationStatus.RESERVED " +
+           "  AND r.startTime <= :now AND r.endTime > :now")
+    List<UUID> findPendingSpotIdsForLot(@Param("lotId") UUID lotId, @Param("now") LocalDateTime now);
 
     Page<Reservation> findAllByDriverIdOrderByCreatedAtDesc(UUID driverId, Pageable pageable);
 

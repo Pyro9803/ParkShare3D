@@ -6,6 +6,7 @@ import com.parkshare.parkinglot.dto.CreateLotRequest;
 import com.parkshare.parkinglot.dto.CreateSpotRequest;
 import com.parkshare.parkinglot.dto.LotDetailResponse;
 import com.parkshare.parkinglot.dto.LotResponse;
+import com.parkshare.parkinglot.dto.ParkingLotMapResponse;
 import com.parkshare.parkinglot.dto.UpdateLotRequest;
 import com.parkshare.parkingspot.dto.SpotResponse;
 import com.parkshare.shared.api.ApiResponse;
@@ -30,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ParkingLotController {
 
     private final ParkingLotService parkingLotService;
+    private final ParkingLotMapService mapService;
 
-    public ParkingLotController(ParkingLotService parkingLotService) {
+    public ParkingLotController(ParkingLotService parkingLotService, ParkingLotMapService mapService) {
         this.parkingLotService = parkingLotService;
+        this.mapService = mapService;
     }
 
     @PostMapping
@@ -82,5 +85,11 @@ public class ParkingLotController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.success(parkingLotService.addSpot(id, callerId, request)));
+    }
+
+    @GetMapping("/{lotId}/map")
+    public ResponseEntity<ApiResponse<ParkingLotMapResponse>> getMap(
+            @PathVariable UUID lotId) {
+        return ResponseEntity.ok(ApiResponse.success(mapService.getMap(lotId)));
     }
 }

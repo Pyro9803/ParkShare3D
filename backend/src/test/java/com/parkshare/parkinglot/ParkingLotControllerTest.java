@@ -55,6 +55,9 @@ class ParkingLotControllerTest {
     private ParkingLotService parkingLotService;
 
     @MockBean
+    private ParkingLotMapService parkingLotMapService;
+
+    @MockBean
     private com.parkshare.parkingspot.SpotSearchService spotSearchService;
 
     @Autowired
