@@ -21,6 +21,7 @@ import com.parkshare.shared.idempotency.IdempotencyService;
 import com.parkshare.shared.util.PriceCalculator;
 import com.parkshare.vehicle.Vehicle;
 import com.parkshare.vehicle.VehicleRepository;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -81,7 +82,7 @@ public class ReservationService {
         try {
             return transactionTemplate.execute(status -> createReservationInternal(driverId, request, idempotencyKey));
         } catch (DataIntegrityViolationException e) {
-            if (idempotencyKey != null && e.getMessage() != null && e.getMessage().contains("uq_reservations_idempotency_key")) {
+            if (idempotencyKey != null && isIdempotencyKeyViolation(e)) {
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException ignored) {
@@ -92,6 +93,13 @@ public class ReservationService {
             }
             throw e;
         }
+    }
+
+    private static boolean isIdempotencyKeyViolation(DataIntegrityViolationException e) {
+        if (e.getCause() instanceof ConstraintViolationException cve) {
+            return "uq_reservations_idempotency_key".equals(cve.getConstraintName());
+        }
+        return false;
     }
 
     private ReservationResponse createReservationInternal(UUID driverId, CreateReservationRequest request, String idempotencyKey) {
@@ -270,6 +278,10 @@ public class ReservationService {
 
         reservation.setStatus(ReservationStatus.COMPLETED);
         reservationRepository.save(reservation);
+
+        ParkingSpot spot = parkingSpotRepository.findByIdAndActiveTrue(reservation.getSpotId())
+                .orElseThrow(() -> new EntityNotFoundException("SPOT_NOT_FOUND", "Parking spot not found"));
+        mapCacheService.evict(spot.getLotId());
 
         CheckInLog log = CheckInLog.builder()
                 .reservationId(reservation.getId())
